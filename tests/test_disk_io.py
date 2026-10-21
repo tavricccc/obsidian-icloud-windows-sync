@@ -214,6 +214,17 @@ class TestRemoveFile:
         await dio.remove_file(str(f), "test")
         assert not sub.exists()
 
+    @pytest.mark.asyncio
+    async def test_never_removes_root_with_unnormalized_config(self, cfg, tmp_path, mock_log):
+        vault = tmp_path / "Vault"; vault.mkdir()
+        f = vault / "only.md"; f.write_text("x")
+        cfg.local_vault = str(vault).upper() + os.sep  # different case + trailing slash
+        with patch("platform.system", return_value="Windows"):
+            dio = DiskIO(cfg, mock_log)
+        await dio.remove_file(str(f), "test")
+        assert vault.exists()
+        assert tmp_path.exists()
+
 #  Remove File Sync
 
 class TestRemoveFileSync:

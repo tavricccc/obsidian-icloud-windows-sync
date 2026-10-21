@@ -269,20 +269,30 @@ class DiskIO:
                 return
             self.log.success("SUCCESS", f"Removed {description}: {self.config.disp(path)}", level="verbose")
 
-            roots = {self.config.local_vault, self.config.icloud_vault, self.config.history_dir}
-            dir_path = os.path.dirname(path)
-            while dir_path and dir_path not in roots:
-                if os.path.exists(dir_path) and not os.listdir(dir_path):
-                    try:
-                        await asyncio.to_thread(os.rmdir, dir_path)
-                        self.log.info("INFO", f"Removed empty dir: {self.config.disp(dir_path)}", level="verbose")
-                        dir_path = os.path.dirname(dir_path)
-                    except OSError:
-                        break
-                else:
-                    break
+            await self.prune_empty_dirs(os.path.dirname(path))
         except Exception as e:
             self.log.error("FAILED", f"Remove {description} {path}: {e}")
+
+    async def prune_empty_dirs(self, dir_path: str):
+        """
+        Removes now-empty parent directories, stopping at (and never removing) a sync root.
+        Paths are normalized so a trailing slash or different casing in the config can't
+        let the walk remove the vault root itself or wander outside it.
+        """
+        def norm(p: str) -> str:
+            return os.path.normcase(os.path.abspath(p))
+
+        roots = [norm(r) for r in (self.config.local_vault, self.config.icloud_vault, self.config.history_dir) if r]
+        current = norm(dir_path)
+        while any(current != r and current.startswith(r.rstrip(os.sep) + os.sep) for r in roots):
+            if not os.path.isdir(current) or os.listdir(current):
+                break
+            try:
+                await asyncio.to_thread(os.rmdir, current)
+            except OSError:
+                break
+            self.log.info("INFO", f"Removed empty dir: {self.config.disp(current)}", level="verbose")
+            current = os.path.dirname(current)
 
     def remove_file_sync(self, path: str, description: str):
         try:
