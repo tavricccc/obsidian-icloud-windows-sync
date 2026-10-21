@@ -363,6 +363,22 @@ class TestDaemonLoop:
         await self._run_briefly(engine)
         assert engine.seed_existing_files.await_count == 1
 
+#  One-shot mode
+
+class TestOneShotMode:
+    @pytest.mark.asyncio
+    async def test_syncs_everything_then_returns(self, engine, cfg):
+        cfg.run_continuously = False
+        _write(_local(cfg, "a.md"), "local note one")
+        _write(_icloud(cfg, "b.md"), "cloud note two")
+        engine.create_observer = MagicMock()
+        await asyncio.wait_for(engine.run(), timeout=10)
+        assert os.path.exists(_icloud(cfg, "a.md"))
+        assert os.path.exists(_local(cfg, "b.md"))
+        assert not engine.file_workers
+        engine.create_observer.assert_not_called()
+        assert os.path.exists(cfg.state_file_path)
+
 #  Tiny file guard
 
 class TestTinyFiles:

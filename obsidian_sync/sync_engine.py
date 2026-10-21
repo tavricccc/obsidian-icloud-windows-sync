@@ -246,13 +246,16 @@ class SyncEngine:
         await self.log.cleanup_old_logs()
         self.log.init_log_file()
         self.validate_config()
-        self.log.startup("DAEMON MODE")
+        self.log.startup("DAEMON MODE" if self.config.run_continuously else "ONE-SHOT MODE")
         self.hasher.load_state()
         purged = self.io.purge_old_trash()
         if purged:
             self.log.info("TRASH", f"Purged {purged} trash folder(s) older than {self.config.trash_retention_days} days", level="verbose")
 
         self.loop = asyncio.get_running_loop()
+        if not self.config.run_continuously:
+            await self.run_once()
+            return
         observer = self.create_observer()
         loop = asyncio.get_running_loop()
         last_save = loop.time()
@@ -297,3 +300,24 @@ class SyncEngine:
             self.hasher.save_state()
             self.log.flush()
             self.log.success("DONE", "Graceful shutdown complete.", level="important")
+
+    async def wait_for_workers(self):
+        while self.file_workers:
+            await asyncio.gather(*list(self.file_workers.values()), return_exceptions=True)
+
+    async def run_once(self):
+        """
+        Single full pass for scheduled runs (`run_continuously: false`): queue every
+        known path, wait until all of them are synced, save state and return.
+        """
+        try:
+            await self.seed_existing_files()
+            await self.wait_for_workers()
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            self.log.warn("INFO", "Shutdown requested, saving state...", level="important")
+            for worker in self.file_workers.values():
+                worker.cancel()
+        finally:
+            self.hasher.save_state()
+            self.log.flush()
+        self.log.success("DONE", "One-shot sync pass complete.", level="important")
