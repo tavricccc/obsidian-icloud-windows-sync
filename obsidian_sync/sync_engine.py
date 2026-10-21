@@ -239,6 +239,9 @@ class SyncEngine:
         self.validate_config()
         self.log.startup("DAEMON MODE")
         self.hasher.load_state()
+        purged = self.io.purge_old_trash()
+        if purged:
+            self.log.info("TRASH", f"Purged {purged} trash folder(s) older than {self.config.trash_retention_days} days", level="verbose")
 
         self.loop = asyncio.get_running_loop()
         observer = self.create_observer()

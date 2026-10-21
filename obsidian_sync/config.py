@@ -17,6 +17,7 @@ class SyncConfig:
     icloud_vault: str = ""
     history_dir: str = ""
     logs_dir: str = ""
+    trash_dir: str = ""
     # Sync
     run_continuously: bool = True
     check_icloud_status: bool = True
@@ -25,6 +26,7 @@ class SyncConfig:
     stabilize_wait: int = 8
     tiny_threshold: int = 8
     max_concurrent_io: int = 50
+    trash_retention_days: int = 30
     # Logging
     console_level: str = "normal"
     shorter_paths: bool = True
@@ -67,6 +69,7 @@ class SyncConfig:
             icloud_vault=paths.get("icloud_vault", ""),
             history_dir=paths.get("history_dir", ""),
             logs_dir=paths.get("logs_dir", ""),
+            trash_dir=paths.get("trash_dir", ""),
             run_continuously=sync.get("run_continuously", True),
             check_icloud_status=sync.get("check_icloud_status", True),
             poll_interval=sync.get("poll_interval", 2),
@@ -74,6 +77,7 @@ class SyncConfig:
             stabilize_wait=sync.get("stabilize_wait", 8),
             tiny_threshold=sync.get("tiny_threshold", 8),
             max_concurrent_io=sync.get("max_concurrent_io", 50),
+            trash_retention_days=sync.get("trash_retention_days", 30),
             console_level=logging_cfg.get("console_level", "normal"),
             shorter_paths=logging_cfg.get("shorter_paths", True),
             max_display_length=logging_cfg.get("max_display_length", 50),
@@ -92,6 +96,14 @@ class SyncConfig:
             str: The absolute file path to the JSON state cache file within the logs directory.
         """
         return os.path.join(self.logs_dir, "sync_state.json")
+
+    @property
+    def trash_path(self) -> str:
+        """
+        Gets the folder where deleted files are moved instead of being destroyed.
+        Defaults to `<logs_dir>/trash` when `trash_dir` is not set.
+        """
+        return self.trash_dir or os.path.join(self.logs_dir, "trash")
 
     def validate(self) -> list[tuple[str, str, str]]:
         """
@@ -135,6 +147,14 @@ class SyncConfig:
 
         if self.stability_window < 0:
             errors.append(("invalid_value", "critical", "stability_window cannot be negative"))
+
+        if self.trash_dir:
+            norm_trash = os.path.normcase(os.path.abspath(self.trash_dir))
+            for name, guarded in [("local_vault", self.local_vault), ("icloud_vault", self.icloud_vault), ("history_dir", self.history_dir)]:
+                if guarded:
+                    norm_guarded = os.path.normcase(os.path.abspath(guarded))
+                    if norm_trash == norm_guarded or norm_trash.startswith(norm_guarded + os.sep):
+                        errors.append(("trash_dir_inside_sync_root", "critical", f"trash_dir cannot be inside or equal to {name}"))
 
         return errors
 

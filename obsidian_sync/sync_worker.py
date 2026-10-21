@@ -185,7 +185,7 @@ class FileSynchronizer:
         if not L_exists and not C_exists:
             if H_exists:
                 self.log.warn("REMOVING HISTORY", f"{colored('No local', Fore.RED)} & {colored('No iCloud', Fore.RED)} for {d}", level="important")
-                await self.io.remove_file(history, "history")
+                await self.io.trash_file(history, "history")
             # Clean stale state
             if rel_path in self.hasher.state:
                 del self.hasher.state[rel_path]
@@ -198,7 +198,7 @@ class FileSynchronizer:
             Lh, Ch, Hh = await self.recheck(local, icloud, history, rel_path)
             if Ch is not None and Hh is not None and Ch == Hh:
                 self.log.delete(f"{colored('Removing from iCloud', Fore.CYAN)} & history for {d}", d, level="verbose")
-                await self.io.remove_file(icloud, "iCloud")
+                await self.io.trash_file(icloud, "iCloud")
                 await self.io.remove_file(history, "history")
             else:
                 self.log.pull(f"{colored('Restoring to local', Fore.GREEN)} from iCloud for {d}", d, level="verbose")
@@ -211,7 +211,7 @@ class FileSynchronizer:
             Lh, Ch, Hh = await self.recheck(local, icloud, history, rel_path)
             if Lh is not None and Hh is not None and Lh == Hh:
                 self.log.delete(f"{colored('Removing local', Fore.RED)} & history for {d}", d, level="verbose")
-                await self.io.remove_file(local, "local")
+                await self.io.trash_file(local, "local")
                 await self.io.remove_file(history, "history")
             else:
                 self.log.push(f"Local changed for {d} -> pushing to iCloud", d, level="verbose")

@@ -294,6 +294,63 @@ class DiskIO:
             self.log.info("INFO", f"Removed empty dir: {self.config.disp(current)}", level="verbose")
             current = os.path.dirname(current)
 
+    def _trash_destination(self, path: str, description: str) -> str:
+        abs_path = os.path.abspath(path)
+        norm = os.path.normcase(abs_path)
+        rel = os.path.basename(path)
+        for root in (self.config.local_vault, self.config.icloud_vault, self.config.history_dir):
+            if root:
+                norm_root = os.path.normcase(os.path.abspath(root)).rstrip(os.sep) + os.sep
+                if norm.startswith(norm_root):
+                    rel = abs_path[len(norm_root):]
+                    break
+        label = "".join(c if c.isalnum() else "_" for c in description.lower())
+        dest = os.path.join(self.config.trash_path, datetime.now().strftime("%Y-%m-%d"), label, rel)
+        if os.path.exists(dest):
+            base, ext = os.path.splitext(dest)
+            dest = f"{base}_{datetime.now().strftime('%H%M%S_%f')}{ext}"
+        return dest
+
+    async def trash_file(self, path: str, description: str):
+        """
+        Moves a file into the dated trash folder instead of deleting it, so a wrong
+        delete decision (or a deletion the user regrets) can always be undone.
+        """
+        try:
+            if not os.path.exists(path):
+                return
+            dest = self._trash_destination(path, description)
+            ensure_dir(os.path.dirname(dest))
+            self.set_normal_attributes(path)
+            try:
+                await asyncio.to_thread(shutil.move, path, dest)
+            except FileNotFoundError:
+                return
+            self.log.success("SUCCESS", f"Moved {description} to trash: {self.config.disp(path)}", level="verbose")
+            await self.prune_empty_dirs(os.path.dirname(path))
+        except Exception as e:
+            self.log.error("FAILED", f"Trash {description} {path}: {e}")
+
+    def purge_old_trash(self) -> int:
+        """
+        Removes dated trash folders older than `trash_retention_days`. Returns the number removed.
+        """
+        days = self.config.trash_retention_days
+        root = self.config.trash_path
+        if days <= 0 or not os.path.isdir(root):
+            return 0
+        cutoff = datetime.now().date().toordinal() - days
+        removed = 0
+        for name in os.listdir(root):
+            try:
+                day = datetime.strptime(name, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if day.toordinal() < cutoff:
+                shutil.rmtree(os.path.join(root, name), ignore_errors=True)
+                removed += 1
+        return removed
+
     def remove_file_sync(self, path: str, description: str):
         try:
             if os.path.exists(path):
