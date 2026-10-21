@@ -410,6 +410,25 @@ class TestPerFileQueue:
         assert engine.synchronizer.sync_wrapper.await_count == 2
 
 
+    @pytest.mark.asyncio
+    async def test_idle_worker_is_cleaned_up(self, engine):
+        engine.synchronizer.sync_wrapper = AsyncMock()
+        engine.enqueue_file_event(FileSyncEvent("modified", "a.md"))
+        worker = engine.file_workers["a.md"]
+        await asyncio.wait_for(worker, timeout=1)
+        assert "a.md" not in engine.file_workers
+        assert "a.md" not in engine.file_queues
+
+    @pytest.mark.asyncio
+    async def test_event_after_cleanup_starts_new_worker(self, engine):
+        engine.synchronizer.sync_wrapper = AsyncMock()
+        engine.enqueue_file_event(FileSyncEvent("modified", "a.md"))
+        await asyncio.wait_for(engine.file_workers["a.md"], timeout=1)
+        engine.enqueue_file_event(FileSyncEvent("modified", "a.md"))
+        await asyncio.wait_for(engine.file_workers["a.md"], timeout=1)
+        assert engine.synchronizer.sync_wrapper.await_count == 2
+
+
 class TestWatcherScopeAndSuppression:
     def test_observer_watches_only_local_and_icloud(self, engine, cfg):
         with patch("obsidian_sync.sync_engine.Observer") as observer_cls:

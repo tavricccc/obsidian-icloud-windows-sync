@@ -197,6 +197,15 @@ class SyncEngine:
                     f"Finished {event.event_type} sync for {self.config.disp(rel_path)}",
                     level="verbose",
                 )
+            # Exit when idle so long-running daemons don't keep one task per path ever seen.
+            # No await between this check and the cleanup, so no event can slip in between;
+            # a later event simply starts a fresh worker.
+            if queue.empty():
+                if self.file_queues.get(rel_path) is queue:
+                    del self.file_queues[rel_path]
+                if self.file_workers.get(rel_path) is asyncio.current_task():
+                    del self.file_workers[rel_path]
+                return
 
     def create_observer(self):
         observer = Observer()
