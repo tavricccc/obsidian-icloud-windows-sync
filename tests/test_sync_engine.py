@@ -122,6 +122,12 @@ class TestGatherRelPaths:
 #  sync_file L/C/H
 
 class TestSyncFileStates:
+    @pytest.fixture(autouse=True)
+    def _populated_vaults(self, cfg):
+        # A synced file on every side, so the empty-vault safety guard stays out of the way
+        for f in (_local(cfg, "anchor.md"), _icloud(cfg, "anchor.md"), _history(cfg, "anchor.md")):
+            _write(f, "anchor")
+
     @pytest.mark.asyncio
     async def test_all_missing_does_nothing(self, eng, cfg):
         await eng.sync_file("ghost.md")
@@ -289,6 +295,45 @@ class TestSyncFileStates:
         }
         await eng.sync_file("push2.md")
         assert os.path.exists(_icloud(cfg, "push2.md"))
+
+#  Vault safety guard
+
+class TestVaultGuard:
+    @pytest.mark.asyncio
+    async def test_empty_icloud_vault_does_not_wipe_local(self, eng, cfg):
+        for rel in ("a.md", "b.md"):
+            _write(_local(cfg, rel), "synced text")
+            _write(_history(cfg, rel), "synced text")
+        for rel in ("a.md", "b.md"):
+            await eng.sync_file(rel)
+        assert os.path.exists(_local(cfg, "a.md"))
+        assert os.path.exists(_local(cfg, "b.md"))
+        eng.log.error.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_missing_local_vault_does_not_wipe_icloud(self, eng, cfg):
+        _write(_icloud(cfg, "a.md"), "synced text")
+        _write(_history(cfg, "a.md"), "synced text")
+        os.rmdir(cfg.local_vault)
+        await eng.sync_file("a.md")
+        assert os.path.exists(_icloud(cfg, "a.md"))
+
+    @pytest.mark.asyncio
+    async def test_resumes_when_vault_returns(self, eng, cfg):
+        _write(_local(cfg, "a.md"), "synced text")
+        _write(_history(cfg, "a.md"), "synced text")
+        await eng.sync_file("a.md")
+        _write(_icloud(cfg, "a.md"), "synced text")
+        _write(_local(cfg, "b.md"), "brand new note")
+        await eng.sync_file("b.md")
+        assert os.path.exists(_icloud(cfg, "b.md"))
+        eng.log.success.assert_any_call("SAFETY", "Both vaults reachable again; resuming sync.", level="important")
+
+    @pytest.mark.asyncio
+    async def test_first_run_with_empty_icloud_still_pushes(self, eng, cfg):
+        _write(_local(cfg, "a.md"), "first note ever")
+        await eng.sync_file("a.md")
+        assert os.path.exists(_icloud(cfg, "a.md"))
 
 #  Tiny file guard
 

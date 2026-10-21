@@ -30,6 +30,48 @@ class FileSynchronizer:
         self.io = disk_io
         self.duplicates = duplicates
         self.io_semaphore = asyncio.Semaphore(self.config.max_concurrent_io)
+        self._vaults_were_available = True
+
+    @staticmethod
+    def _has_entries(root: str) -> bool:
+        try:
+            with os.scandir(root) as it:
+                return any(True for _ in it)
+        except OSError:
+            return False
+
+    def vaults_available(self) -> bool:
+        """
+        Returns False when a vault looks unmounted or wiped, e.g. iCloud signed out,
+        the drive not attached yet, or the folder reset by iCloud for Windows.
+
+        A vault is unavailable if its folder is missing, or if it is empty while
+        history still holds files (we have synced before, so an empty side means
+        "can't see it", not "user deleted everything"). Syncing in that state would
+        apply the delete rules to every file and wipe the other side.
+        """
+        cfg = self.config
+        history_has_files = self._has_entries(cfg.history_dir)
+        for root in (cfg.local_vault, cfg.icloud_vault):
+            if not os.path.isdir(root):
+                return False
+            if history_has_files and not self._has_entries(root):
+                return False
+        return True
+
+    def check_vaults(self) -> bool:
+        ok = self.vaults_available()
+        if not ok and self._vaults_were_available:
+            self.log.error(
+                "SAFETY",
+                "A vault is missing or empty while history has files; pausing all sync to avoid mass deletion. "
+                "Check that iCloud Drive is signed in and both folders are reachable.",
+                level="important",
+            )
+        elif ok and not self._vaults_were_available:
+            self.log.success("SAFETY", "Both vaults reachable again; resuming sync.", level="important")
+        self._vaults_were_available = ok
+        return ok
 
     async def _copy_via_staging(self, source: str, destinations: list[tuple[str, str]], source_is_icloud: bool = False):
         staging_root = os.path.join(self.config.logs_dir, ".obsidian_sync_staging")
@@ -131,6 +173,9 @@ class FileSynchronizer:
         icloud = os.path.join(cfg.icloud_vault, rel_path)
         history = os.path.join(cfg.history_dir, rel_path)
         d = cfg.disp(rel_path)
+
+        if not self.check_vaults():
+            return
 
         L_exists = safe_exists(local)
         C_exists = safe_exists(icloud)
