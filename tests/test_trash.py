@@ -103,6 +103,38 @@ class TestSyncDeletesToTrash:
         assert not os.path.exists(os.path.join(cfg.local_vault, "gone.md"))
         assert os.path.exists(_trashed(cfg, "local", "gone.md"))
 
+#  delete rate limit
+
+class TestDeleteRateLimit:
+    def test_blocks_after_limit(self, eng, cfg, mock_log):
+        cfg.max_deletes_per_minute = 3
+        assert [eng.allow_delete() for _ in range(5)] == [True, True, True, False, False]
+        mock_log.error.assert_called_once()
+
+    def test_zero_disables_limit(self, eng, cfg):
+        cfg.max_deletes_per_minute = 0
+        assert all(eng.allow_delete() for _ in range(500))
+
+    def test_window_expires(self, eng, cfg):
+        cfg.max_deletes_per_minute = 1
+        with patch("obsidian_sync.sync_worker.time.monotonic", side_effect=[0.0, 1.0, 61.5]):
+            assert eng.allow_delete() is True
+            assert eng.allow_delete() is False
+            assert eng.allow_delete() is True
+
+    @pytest.mark.asyncio
+    async def test_held_back_delete_keeps_file(self, eng, cfg):
+        cfg.max_deletes_per_minute = 1
+        for root in (cfg.local_vault, cfg.icloud_vault, cfg.history_dir):
+            _write(os.path.join(root, "anchor.md"), "anchor")
+        for rel in ("a.md", "b.md"):
+            for root in (cfg.local_vault, cfg.history_dir):
+                _write(os.path.join(root, rel), "synced text")
+        await eng.sync_file("a.md")
+        await eng.sync_file("b.md")
+        assert not os.path.exists(os.path.join(cfg.local_vault, "a.md"))
+        assert os.path.exists(os.path.join(cfg.local_vault, "b.md"))
+
 #  config
 
 class TestTrashConfig:
@@ -111,6 +143,10 @@ class TestTrashConfig:
         codes = [e[0] for e in cfg.validate()]
         assert "trash_dir_inside_sync_root" in codes
 
+    def test_negative_delete_limit_is_critical(self, cfg):
+        cfg.max_deletes_per_minute = -1
+        assert any(e[0] == "invalid_value" for e in cfg.validate())
+
     def test_yaml_loads_new_fields(self, tmp_path):
         p = tmp_path / "c.yaml"
         p.write_text(
@@ -118,4 +154,4 @@ class TestTrashConfig:
             encoding="utf-8",
         )
         c = SyncConfig.from_yaml(str(p))
-        assert (c.trash_dir, c.trash_retention_days) == ("D:/Trash", 3)
+        assert (c.trash_dir, c.max_deletes_per_minute, c.trash_retention_days) == ("D:/Trash", 7, 3)

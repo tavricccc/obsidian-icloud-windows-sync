@@ -26,6 +26,7 @@ class SyncConfig:
     stabilize_wait: int = 8
     tiny_threshold: int = 8
     max_concurrent_io: int = 50
+    max_deletes_per_minute: int = 50
     trash_retention_days: int = 30
     # Logging
     console_level: str = "normal"
@@ -77,6 +78,7 @@ class SyncConfig:
             stabilize_wait=sync.get("stabilize_wait", 8),
             tiny_threshold=sync.get("tiny_threshold", 8),
             max_concurrent_io=sync.get("max_concurrent_io", 50),
+            max_deletes_per_minute=sync.get("max_deletes_per_minute", 50),
             trash_retention_days=sync.get("trash_retention_days", 30),
             console_level=logging_cfg.get("console_level", "normal"),
             shorter_paths=logging_cfg.get("shorter_paths", True),
@@ -147,6 +149,9 @@ class SyncConfig:
 
         if self.stability_window < 0:
             errors.append(("invalid_value", "critical", "stability_window cannot be negative"))
+
+        if self.max_deletes_per_minute < 0:
+            errors.append(("invalid_value", "critical", "max_deletes_per_minute cannot be negative"))
 
         if self.trash_dir:
             norm_trash = os.path.normcase(os.path.abspath(self.trash_dir))

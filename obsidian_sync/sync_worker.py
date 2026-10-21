@@ -1,5 +1,7 @@
 import os
+import time
 import asyncio
+from collections import deque
 import traceback
 import tempfile
 
@@ -31,6 +33,34 @@ class FileSynchronizer:
         self.duplicates = duplicates
         self.io_semaphore = asyncio.Semaphore(self.config.max_concurrent_io)
         self._vaults_were_available = True
+        self._recent_deletes: deque[float] = deque()
+        self._delete_limit_warned = False
+
+    def allow_delete(self) -> bool:
+        """
+        Rate-limits delete decisions. A burst of deletes usually means something
+        outside the user's control (a vault being reset or partially synced), so
+        past the limit deletions are held back and retried on a later pass.
+        """
+        limit = self.config.max_deletes_per_minute
+        if limit <= 0:
+            return True
+        now = time.monotonic()
+        while self._recent_deletes and now - self._recent_deletes[0] > 60:
+            self._recent_deletes.popleft()
+        if len(self._recent_deletes) >= limit:
+            if not self._delete_limit_warned:
+                self.log.error(
+                    "SAFETY",
+                    f"More than {limit} deletions in a minute; holding further deletions back. "
+                    "They continue on later passes, or raise max_deletes_per_minute if this is intended.",
+                    level="important",
+                )
+                self._delete_limit_warned = True
+            return False
+        self._delete_limit_warned = False
+        self._recent_deletes.append(now)
+        return True
 
     @staticmethod
     def _has_entries(root: str) -> bool:
@@ -184,6 +214,8 @@ class FileSynchronizer:
         # Nothing exists anywhere
         if not L_exists and not C_exists:
             if H_exists:
+                if not self.allow_delete():
+                    return
                 self.log.warn("REMOVING HISTORY", f"{colored('No local', Fore.RED)} & {colored('No iCloud', Fore.RED)} for {d}", level="important")
                 await self.io.trash_file(history, "history")
             # Clean stale state
@@ -197,6 +229,8 @@ class FileSynchronizer:
             self.log.warn("DELETE", f"{colored('Local missing', Fore.RED)}, stabilizing for {d}", level="verbose")
             Lh, Ch, Hh = await self.recheck(local, icloud, history, rel_path)
             if Ch is not None and Hh is not None and Ch == Hh:
+                if not self.allow_delete():
+                    return
                 self.log.delete(f"{colored('Removing from iCloud', Fore.CYAN)} & history for {d}", d, level="verbose")
                 await self.io.trash_file(icloud, "iCloud")
                 await self.io.remove_file(history, "history")
@@ -210,6 +244,8 @@ class FileSynchronizer:
             self.log.warn("DELETE", f"{colored('iCloud missing', Fore.RED)}, stabilizing for {d}", level="verbose")
             Lh, Ch, Hh = await self.recheck(local, icloud, history, rel_path)
             if Lh is not None and Hh is not None and Lh == Hh:
+                if not self.allow_delete():
+                    return
                 self.log.delete(f"{colored('Removing local', Fore.RED)} & history for {d}", d, level="verbose")
                 await self.io.trash_file(local, "local")
                 await self.io.remove_file(history, "history")
