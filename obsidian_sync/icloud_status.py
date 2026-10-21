@@ -220,7 +220,7 @@ class ICloudStatusChecker:
         self,
         path: str,
         stable_seconds: float = 2.0,
-        timeout_seconds: float = 120.0,
+        timeout_seconds: float = 0,
         poll_seconds: float = 0.5,
         on_update: Optional[Callable[[str], None]] = None,
     ) -> bool:
@@ -228,8 +228,9 @@ class ICloudStatusChecker:
         Waits until an iCloud file exists, has stable size/mtime, has local
         content available, and Explorer no longer reports upload/sync pending.
         
-        Will retry indefinitely with periodic warnings if iCloud is slow.
-        The timeout_seconds parameter is kept for compatibility but no longer enforced.
+        Warns periodically if iCloud is slow. Gives up and returns False after
+        timeout_seconds (0 waits forever), so one stuck file can't hold an I/O
+        slot indefinitely; callers retry it on a later pass.
         """
         start_time = time.time()
         stable_since = None
@@ -239,8 +240,12 @@ class ICloudStatusChecker:
         warning_thresholds = [30, 60, 120]  # Initial warnings at these seconds
         next_periodic_warning = 180  # After 120s, warn every 60s
 
-        while True:  # Infinite retry loop
+        while True:
             elapsed = time.time() - start_time
+            if timeout_seconds > 0 and elapsed >= timeout_seconds:
+                if on_update is not None:
+                    on_update(f"gave up after {int(elapsed)}s; will retry on a later pass")
+                return False
             
             # Log warnings at specific thresholds
             if warning_thresholds and elapsed >= warning_thresholds[0]:

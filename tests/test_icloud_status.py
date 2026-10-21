@@ -149,5 +149,19 @@ class TestWaitUntilUploaded:
         assert any("pending=True" in update for update in updates)
         assert "settled after" in updates[-1]  # Message now includes checkmark emoji prefix
 
+    @pytest.mark.asyncio
+    async def test_wait_until_uploaded_gives_up_after_timeout(self):
+        checker = ICloudStatusChecker()
+        checker.snapshot = MagicMock(return_value=None)
+        updates: list[str] = []
+        ok = await checker.wait_until_uploaded(
+            "C:/fake/stuck.md",
+            poll_seconds=0.01,
+            timeout_seconds=0.05,
+            on_update=updates.append,
+        )
+        assert ok is False
+        assert "gave up" in updates[-1]
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

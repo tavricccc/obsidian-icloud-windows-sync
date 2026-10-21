@@ -184,6 +184,29 @@ class TestAsyncCopy:
         assert observed["dst"] == str(dst)
         assert observed["tmp"] == str(dst) + ".tmp"
 
+class TestICloudWaitTimeout:
+    @pytest.mark.asyncio
+    async def test_copy_to_icloud_raises_when_upload_never_settles(self, cfg, tmp_path, mock_log):
+        cfg.check_icloud_status = True
+        cfg.icloud_wait_timeout = 1
+        src = tmp_path / "src.md"; src.write_text("hello")
+        with patch("platform.system", return_value="Windows"):
+            dio = DiskIO(cfg, mock_log)
+        dio.icloud_checker.wait_until_uploaded = AsyncMock(return_value=False)
+        with pytest.raises(TimeoutError):
+            await dio.copy_to_icloud(str(src), str(tmp_path / "icloud" / "dst.md"))
+        assert dio.icloud_checker.wait_until_uploaded.call_args.kwargs["timeout_seconds"] == 1.0
+
+    @pytest.mark.asyncio
+    async def test_copy_from_icloud_raises_when_file_never_available(self, cfg, tmp_path, mock_log):
+        cfg.check_icloud_status = True
+        src = tmp_path / "src.md"; src.write_text("hello")
+        with patch("platform.system", return_value="Windows"):
+            dio = DiskIO(cfg, mock_log)
+        dio.icloud_checker.wait_until_uploaded = AsyncMock(return_value=False)
+        with pytest.raises(TimeoutError):
+            await dio.copy_from_icloud(str(src), str(tmp_path / "dst.md"))
+
 #  Remove File
 
 class TestRemoveFile:
