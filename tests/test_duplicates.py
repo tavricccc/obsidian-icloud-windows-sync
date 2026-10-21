@@ -123,6 +123,12 @@ class TestUserInteraction:
             scanner.scan_and_clean()
         scanner.log.error.assert_called()
 
+    def test_no_console_skips_without_crashing(self, scanner, cfg):
+        self._create_dup(cfg)
+        with patch("builtins.input", side_effect=EOFError):
+            scanner.scan_and_clean()
+        scanner.io.trash_file_sync.assert_not_called()
+
     def test_count_in_error_message(self, scanner, cfg):
         for i in range(3):
             p = os.path.join(cfg.local_vault, f"note_CONFLICT_20260101_12000{i}_00000{i}.md")

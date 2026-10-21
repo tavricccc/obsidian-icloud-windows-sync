@@ -63,6 +63,10 @@ class DuplicateScanner:
             print()
             self.log.warn("INFO", "Interrupted, skipping duplicate cleanup.", level="important")
             return
+        except EOFError:
+            # No console (Task Scheduler, headless conhost): never block or crash, just skip
+            self.log.warn("INFO", "No interactive console, skipping duplicate cleanup.", level="important")
+            return
 
         if ans in ('y', 'yes'):
             failed_deletions = []
