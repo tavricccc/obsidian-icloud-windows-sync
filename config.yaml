@@ -6,6 +6,8 @@ paths:
   icloud_vault: "C:\\Users\\user\\iCloudDrive\\iCloud~md~obsidian"
   history_dir: "C:\\Obsidian\\History"
   logs_dir: "C:\\Obsidian\\Logs"
+  # Deleted files are moved here instead of being destroyed (default: <logs_dir>\trash)
+  # trash_dir: "C:\\Obsidian\\Trash"
 
 sync:
   run_continuously: true
@@ -14,6 +16,11 @@ sync:
   stability_window: 3
   stabilize_wait: 8
   tiny_threshold: 8
+  max_concurrent_io: 50
+  icloud_wait_timeout: 600     # seconds to wait for iCloud upload/download; 0 = forever
+  rescan_interval: 300         # full rescan every N seconds in daemon mode; 0 = off
+  max_deletes_per_minute: 50   # safety brake on deletions; 0 = no limit
+  trash_retention_days: 30     # purge trash folders older than this; 0 = keep forever
 
 logging:
   console_level: "normal"      # quiet | normal | verbose
