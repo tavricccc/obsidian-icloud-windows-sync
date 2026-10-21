@@ -12,8 +12,8 @@ A highly optimized, asynchronous, three-way sync engine designed to solve the no
    pip install .
    ```
 4. Copy and edit the config file with your actual paths:
-   ```bash
-   cp config.yaml my-config.yaml
+   ```powershell
+   Copy-Item config.yaml my-config.yaml
    ```
    ```yaml
    paths:
@@ -24,11 +24,11 @@ A highly optimized, asynchronous, three-way sync engine designed to solve the no
    ```
 5. Run:
    ```bash
-   obsidian-sync --config config.yaml
+   obsidian-sync --config my-config.yaml
    ```
    Or directly:
    ```bash
-   python -m obsidian_sync --config config.yaml
+   python -m obsidian_sync --config my-config.yaml
    ```
 
 > If you have any trouble in setup, raise issue on git.
@@ -53,8 +53,8 @@ obsidian_sync/
 
 | Mode | Config | Behavior |
 |---|---|---|
-| **One-Shot** | `run_continuously: false` | Single full pass, then exits. Use with Task Scheduler. |
-| **Daemon** | `run_continuously: true` | Runs continuously, polling every `poll_interval` seconds. |
+| **One-Shot** | `run_continuously: false` | Single full pass (no file watcher), then exits. Use with Task Scheduler. |
+| **Daemon** | `run_continuously: true` | Watches both vaults for changes and does a full rescan every `rescan_interval` seconds. |
 
 #### Autostart via Task Scheduler
 
@@ -102,6 +102,11 @@ Each sync pass walks the union of all three directories and applies these rules:
 - **Conflict wait** (`stabilize_wait`): longer wait on both-changed scenarios to detect still-active edits
 - **Atomic writes**: write to `.tmp` then `os.replace()`, with retries and Win32 `MoveFileEx` fallback
 - **Conflict duplicates**: losing side saved as `filename_CONFLICT_TIMESTAMP.ext` before overwrite
+- **History is written last**: a push only updates `H` after iCloud accepted the file, so a failed upload is retried instead of being mistaken for a remote change
+- **Vault guard**: if either vault folder is missing, or empty while history has files (iCloud signed out, drive not mounted), all syncing pauses instead of propagating mass deletions
+- **Trash, not delete**: deletions (including the startup duplicate cleanup) move files to `trash_dir/<date>/<side>/...`, kept for `trash_retention_days`
+- **Delete rate limit**: more than `max_deletes_per_minute` deletions are held back and retried later
+- **iCloud wait timeout**: a file iCloud won't settle gives up after `icloud_wait_timeout` and is retried on the next rescan, so it can't stall other files
 
 ---
 
@@ -115,4 +120,15 @@ All settings live in `config.yaml`:
 | `stabilize_wait` | `8s` | Increase if you edit very slowly |
 | `tiny_threshold` | `8 bytes` | Minimum file size to sync (prevents empty/placeholder files) |
 | `max_concurrent_io` | `50` | Maximum concurrent I/O operations |
+| `icloud_wait_timeout` | `600s` | Give up waiting for iCloud and retry later; `0` waits forever |
+| `rescan_interval` | `300s` | Daemon full rescan period; `0` disables |
+| `max_deletes_per_minute` | `50` | Safety brake on deletions; `0` disables |
+| `trash_retention_days` | `30` | Days to keep trashed files; `0` keeps forever |
+| `trash_dir` (under `paths`) | `<logs_dir>\trash` | Where deleted files go; must be outside the vaults and history |
 | `ignore.patterns` | `[]` | Exclude folders like `.obsidian/cache` |
+## Development
+
+```bash
+pip install -e .[dev]
+python -m pytest tests
+```
