@@ -335,6 +335,34 @@ class TestVaultGuard:
         await eng.sync_file("a.md")
         assert os.path.exists(_icloud(cfg, "a.md"))
 
+#  Daemon loop
+
+class TestDaemonLoop:
+    async def _run_briefly(self, engine, seconds=0.15):
+        engine.create_observer = MagicMock()
+        task = asyncio.create_task(engine.run())
+        await asyncio.sleep(seconds)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    @pytest.mark.asyncio
+    async def test_periodic_rescan_reseeds_files(self, engine, cfg):
+        cfg.run_continuously = True
+        cfg.poll_interval = 0.01
+        cfg.rescan_interval = 0.02
+        engine.seed_existing_files = AsyncMock()
+        await self._run_briefly(engine)
+        assert engine.seed_existing_files.await_count >= 3
+
+    @pytest.mark.asyncio
+    async def test_rescan_disabled_with_zero(self, engine, cfg):
+        cfg.run_continuously = True
+        cfg.poll_interval = 0.01
+        cfg.rescan_interval = 0
+        engine.seed_existing_files = AsyncMock()
+        await self._run_briefly(engine)
+        assert engine.seed_existing_files.await_count == 1
+
 #  Tiny file guard
 
 class TestTinyFiles:

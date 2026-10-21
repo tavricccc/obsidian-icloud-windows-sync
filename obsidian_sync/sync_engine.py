@@ -247,6 +247,7 @@ class SyncEngine:
         observer = self.create_observer()
         loop = asyncio.get_running_loop()
         last_save = loop.time()
+        last_rescan = loop.time()
 
         try:
             observer.start()
@@ -264,6 +265,13 @@ class SyncEngine:
                             self.hasher.save_state()
                         self.log.flush()
                         last_save = now
+                    # Full rescan catches missed watcher events and retries files that
+                    # failed earlier (e.g. an iCloud upload that timed out)
+                    interval = self.config.rescan_interval
+                    if interval > 0 and now - last_rescan >= interval:
+                        last_rescan = now
+                        self.log.info("RESCAN", "Periodic full rescan", level="verbose")
+                        await self.seed_existing_files()
                 except Exception as outer:
                     self.log.error("ERROR", f"Unexpected error in main loop: {outer}")
                     self.log.error("TRACEBACK", traceback.format_exc())
