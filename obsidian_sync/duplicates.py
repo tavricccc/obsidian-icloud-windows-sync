@@ -55,7 +55,7 @@ class DuplicateScanner:
         for p in duplicates:
             self.log.warn("DUPLICATE", self.config.disp(p), level="important")
 
-        self.log.warn("ACTION", "Delete them WITHOUT RECOVERY before sync? (y/N)", level="important")
+        self.log.warn("ACTION", f"Move them to trash ({self.config.disp(self.config.trash_path)}) before sync? (y/N)", level="important")
         sys.stdout.flush()
         try:
             ans = input().strip().lower()
@@ -67,7 +67,7 @@ class DuplicateScanner:
         if ans in ('y', 'yes'):
             failed_deletions = []
             for p in duplicates:
-                self.io.remove_file_sync(p, "Duplicate/Conflict")
+                self.io.trash_file_sync(p, "duplicate")
                 if os.path.exists(p):
                     failed_deletions.append(p)
             if failed_deletions:
@@ -75,7 +75,7 @@ class DuplicateScanner:
                 for p in failed_deletions:
                     self.log.warn("FAILED", self.config.disp(p), level="important")
             else:
-                self.log.success("CLEAN", "All duplicates removed.", level="important")
+                self.log.success("CLEAN", "All duplicates moved to trash.", level="important")
         else:
             self.log.warn("INFO", "Skipping duplicate cleanup.", level="important")
         print("-" * 75)

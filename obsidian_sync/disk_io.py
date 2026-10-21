@@ -317,25 +317,30 @@ class DiskIO:
             dest = f"{base}_{datetime.now().strftime('%H%M%S_%f')}{ext}"
         return dest
 
-    async def trash_file(self, path: str, description: str):
+    def trash_file_sync(self, path: str, description: str) -> bool:
         """
         Moves a file into the dated trash folder instead of deleting it, so a wrong
         delete decision (or a deletion the user regrets) can always be undone.
+        Returns True if the file was moved.
         """
         try:
             if not os.path.exists(path):
-                return
+                return False
             dest = self._trash_destination(path, description)
             ensure_dir(os.path.dirname(dest))
             self.set_normal_attributes(path)
-            try:
-                await asyncio.to_thread(shutil.move, path, dest)
-            except FileNotFoundError:
-                return
-            self.log.success("SUCCESS", f"Moved {description} to trash: {self.config.disp(path)}", level="verbose")
-            await self.prune_empty_dirs(os.path.dirname(path))
+            shutil.move(path, dest)
+        except FileNotFoundError:
+            return False
         except Exception as e:
             self.log.error("FAILED", f"Trash {description} {path}: {e}")
+            return False
+        self.log.success("SUCCESS", f"Moved {description} to trash: {self.config.disp(path)}", level="verbose")
+        return True
+
+    async def trash_file(self, path: str, description: str):
+        if await asyncio.to_thread(self.trash_file_sync, path, description):
+            await self.prune_empty_dirs(os.path.dirname(path))
 
     def purge_old_trash(self) -> int:
         """

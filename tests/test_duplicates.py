@@ -89,36 +89,36 @@ class TestUserInteraction:
         p = self._create_dup(cfg)
         with patch("builtins.input", return_value="y"):
             scanner.scan_and_clean()
-        scanner.io.remove_file_sync.assert_called()
+        scanner.io.trash_file_sync.assert_called()
 
     def test_user_YES_uppercase_triggers_deletion(self, scanner, cfg):
         self._create_dup(cfg)
         with patch("builtins.input", return_value="YES"):
             scanner.scan_and_clean()
-        scanner.io.remove_file_sync.assert_called()
+        scanner.io.trash_file_sync.assert_called()
 
     def test_user_no_skips_deletion(self, scanner, cfg):
         self._create_dup(cfg)
         with patch("builtins.input", return_value="n"):
             scanner.scan_and_clean()
-        scanner.io.remove_file_sync.assert_not_called()
+        scanner.io.trash_file_sync.assert_not_called()
 
     def test_user_empty_skips_deletion(self, scanner, cfg):
         self._create_dup(cfg)
         with patch("builtins.input", return_value=""):
             scanner.scan_and_clean()
-        scanner.io.remove_file_sync.assert_not_called()
+        scanner.io.trash_file_sync.assert_not_called()
 
     def test_all_removed_logs_success(self, scanner, cfg):
         p = self._create_dup(cfg)
-        scanner.io.remove_file_sync.side_effect = lambda path, label: os.remove(path)
+        scanner.io.trash_file_sync.side_effect = lambda path, label: os.remove(path)
         with patch("builtins.input", return_value="y"):
             scanner.scan_and_clean()
         scanner.log.success.assert_called()
 
     def test_partial_failure_logs_error(self, scanner, cfg):
         self._create_dup(cfg)
-        scanner.io.remove_file_sync.return_value = None
+        scanner.io.trash_file_sync.return_value = None
         with patch("builtins.input", return_value="y"):
             scanner.scan_and_clean()
         scanner.log.error.assert_called()
