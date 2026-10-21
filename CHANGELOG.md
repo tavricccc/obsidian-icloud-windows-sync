@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.3.0] - 2026-10-21
+
+### Summary
+- Data-safety release: closes several paths that could lose or wipe notes.
+
+### Fixed
+- Push now writes iCloud before history; a failed upload no longer causes the stale iCloud copy to overwrite the newer local file
+- Sync pauses when a vault is missing or empty while history has files, instead of deleting everything on the other side
+- Empty-dir cleanup normalizes paths and can no longer remove a vault root
+- iCloud waits time out (`icloud_wait_timeout`) instead of blocking an I/O slot forever
+- Idle per-file workers exit, so memory no longer grows with every path ever seen
+- `run_continuously: false` now actually runs a single pass and exits
+- Startup no longer crashes with `EOFError` when there is no console (Task Scheduler)
+- Atomic local writes use unique temp names instead of `<file>.tmp`
+
+### Added
+- Deleted files are moved to a dated trash folder (`trash_dir`, `trash_retention_days`)
+- Delete rate limit (`max_deletes_per_minute`)
+- Periodic full rescan in daemon mode (`rescan_interval`)
+- GitHub Actions CI running the test suite on Windows
+
+### Changed
+- Startup duplicate cleanup moves matches to trash instead of deleting them permanently
+- `pytest` / `pytest-asyncio` moved to the `dev` extra
+- Removed the legacy single-file `sync.py`; use `python -m obsidian_sync`
+
 ## [1.2.0] - 2026-07-05
 
 ### Summary
