@@ -182,7 +182,19 @@ class TestAsyncCopy:
         assert dst.exists()
         assert dst.read_text() == "data"
         assert observed["dst"] == str(dst)
-        assert observed["tmp"] == str(dst) + ".tmp"
+        assert os.path.dirname(observed["tmp"]) == str(dst.parent)
+        assert observed["tmp"].endswith(".tmp")
+        assert sorted(os.listdir(dst.parent)) == ["note.md"]
+
+    @pytest.mark.asyncio
+    async def test_copy_to_disk_leaves_existing_tmp_named_file_alone(self, cfg, tmp_path, mock_log):
+        src = tmp_path / "src.md"; src.write_text("data")
+        dst = tmp_path / "note.md"
+        user_file = tmp_path / "note.md.tmp"; user_file.write_text("mine")
+        with patch("platform.system", return_value="Windows"):
+            dio = DiskIO(cfg, mock_log)
+        await dio.copy_to_disk(str(src), str(dst))
+        assert user_file.read_text() == "mine"
 
 class TestICloudWaitTimeout:
     @pytest.mark.asyncio

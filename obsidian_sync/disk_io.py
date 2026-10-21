@@ -124,10 +124,11 @@ class DiskIO:
 
     def _copy_replace_sync(self, src: str, dst: str) -> None:
         ensure_dir(os.path.dirname(dst))
-        tmp = dst + ".tmp"
+        # Unique name: a fixed "<dst>.tmp" could clobber a real user file with that name,
+        # and two concurrent copies to the same folder could collide
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(dst), prefix=f".{os.path.basename(dst)}.", suffix=".tmp")
+        os.close(fd)
         try:
-            if os.path.exists(tmp):
-                os.remove(tmp)
             shutil.copy2(src, tmp)
             self._replace_with_retries(tmp, dst)
         except Exception:
