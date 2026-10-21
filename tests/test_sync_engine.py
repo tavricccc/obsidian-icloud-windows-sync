@@ -374,6 +374,24 @@ class TestPushRestore:
         await eng.restore_from_icloud("guarded.md")
         assert eng.io.copy_from_icloud.call_count == 1
 
+    @pytest.mark.asyncio
+    async def test_failed_icloud_push_does_not_advance_history(self, eng, cfg):
+        _write(_local(cfg, "n.md"), "new local edit")
+        _write(_icloud(cfg, "n.md"), "old synced text")
+        _write(_history(cfg, "n.md"), "old synced text")
+        eng.io.copy_to_icloud = AsyncMock(side_effect=TimeoutError("iCloud stuck"))
+        with pytest.raises(TimeoutError):
+            await eng.push_to_icloud("n.md")
+        with open(_history(cfg, "n.md"), encoding="utf-8") as f:
+            assert f.read() == "old synced text"
+        # Next pass must retry the push, not pull the stale iCloud copy over local
+        del eng.io.copy_to_icloud
+        await eng.sync_file("n.md")
+        with open(_local(cfg, "n.md"), encoding="utf-8") as f:
+            assert f.read() == "new local edit"
+        with open(_icloud(cfg, "n.md"), encoding="utf-8") as f:
+            assert f.read() == "new local edit"
+
 #  sync_wrapper
 
 class TestSyncWrapper:

@@ -63,7 +63,10 @@ class FileSynchronizer:
     async def push_to_icloud(self, rel: str):
         """
         Asynchronously pushes a file from the local vault to iCloud and history.
-        Copies to history first (fast), then to iCloud (potentially slow).
+        iCloud is written first; history is only updated once iCloud succeeded.
+        History is the "last known synced" baseline, so updating it before
+        iCloud would make a failed upload look like a remote change on the
+        next pass and overwrite the newer local file with the stale iCloud one.
 
         Args:
             rel (str): The relative file path to push.
@@ -73,7 +76,7 @@ class FileSynchronizer:
         history = os.path.join(self.config.history_dir, rel)
         await self._copy_via_staging(
             source=local,
-            destinations=[("disk", history), ("icloud", icloud)],  # History first, then iCloud
+            destinations=[("icloud", icloud), ("disk", history)],  # History last: only after iCloud succeeded
             source_is_icloud=False,
         )
 
